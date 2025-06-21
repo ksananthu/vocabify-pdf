@@ -7,14 +7,32 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib import colors
+from reportlab.platypus import ListFlowable, ListItem
 
 
-def format_text(text):
+
+def parse_meaning_and_examples(text):
     text = text.replace("⇒", "=>")
-    if "=>" in text:
-        before, after = text.split("=>", 1)
-        return f"{before.strip()}<br/><i>{after.strip()}</i>"
-    return text.strip()
+    parts = text.split("=>")
+
+    meaning = parts[0].strip()
+    examples = []
+
+    for i in range(1, len(parts)):
+        example = parts[i].strip()
+
+        if '.' in example:
+            sentence, rest = example.split('.', 1)
+            sentence = sentence.strip() + '.'
+            parts[i] = rest.strip()
+        else:
+            sentence = example.strip()
+
+        if sentence:
+            examples.append(sentence)
+
+    return meaning, examples
+
 
 
 def create_combined_pdf(word_list):
@@ -58,9 +76,29 @@ def create_combined_pdf(word_list):
         elements.append(Spacer(1, 6))
 
         elements.append(Paragraph("Meanings", h3_style))
-        for meaning in word_data["meanings"]:
-            formatted = format_text(meaning.strip())
-            elements.append(Paragraph(f"{formatted}", body_style))
+        
+        # for meaning in word_data["meanings"]:
+        #     formatted = format_text(meaning.strip())
+        #     elements.append(Paragraph(f"{formatted}", body_style))
+        
+
+        for meaning_text in word_data["meanings"]:
+            definition, examples = parse_meaning_and_examples(meaning_text.strip())
+
+            # Main meaning (e.g. "1. ...")
+            elements.append(Paragraph(definition, body_style))
+
+            if examples:
+                # Proper bullet list, nested under the meaning
+                bullet_items = [
+                    ListItem(Paragraph(f"<i>{ex}</i>", body_style), leftIndent=30)
+                    for ex in examples
+                ]
+                bullet_block = ListFlowable(bullet_items, bulletType='bullet', leftIndent=-10)
+                elements.append(bullet_block)
+
+            elements.append(Spacer(1, 8))
+            
         elements.append(Spacer(1, 12))
 
         elements.append(Paragraph("Synonyms", h3_style))
