@@ -3,14 +3,16 @@ import json
 import io
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, PageBreak,
+    ListFlowable, ListItem
+)
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib import colors
-from reportlab.platypus import ListFlowable, ListItem
 
 
-
+# --- Helper to split meaning and examples ---
 def parse_meaning_and_examples(text):
     text = text.replace("⇒", "=>")
     parts = text.split("=>")
@@ -20,7 +22,6 @@ def parse_meaning_and_examples(text):
 
     for i in range(1, len(parts)):
         example = parts[i].strip()
-
         if '.' in example:
             sentence, rest = example.split('.', 1)
             sentence = sentence.strip() + '.'
@@ -34,83 +35,123 @@ def parse_meaning_and_examples(text):
     return meaning, examples
 
 
-
+# --- PDF Generator Function ---
 def create_combined_pdf(word_list):
     buffer = io.BytesIO()
-
     doc = SimpleDocTemplate(buffer, pagesize=A4)
     elements = []
 
-    # H1 style – word title
+    # --- Styles ---
     title_style = ParagraphStyle(
         name="WordTitle",
-        fontSize=32,
-        leading=30,
+        fontSize=28,
+        leading=32,
         alignment=TA_CENTER,
-        textColor=colors.darkblue,
-        spaceAfter=20,
+        textColor=colors.HexColor("#1a237e"),  # Indigo
+        spaceAfter=18,
         fontName="Helvetica-Bold"
     )
 
-    # H3 style – section headers
-    h3_style = ParagraphStyle(
-        name="Heading3",
+    section_style = ParagraphStyle(
+        name="SectionHeader",
         fontSize=16,
-        leading=22,
-        spaceAfter=12,
+        leading=24,
+        spaceAfter=10,
         fontName="Helvetica-Bold"
     )
 
-    # Body text – list items
-    body_style = ParagraphStyle(
-        name="BodyText",
+    meaning_style = ParagraphStyle(
+        name="MeaningText",
         fontSize=12,
         leading=20,
-        spaceAfter=10,
-        leftIndent=20
+        spaceAfter=6,
+        leftIndent=0,
+        fontName="Helvetica-Bold",
+        textColor=colors.black
     )
 
+    example_style = ParagraphStyle(
+        name="ExampleText",
+        fontSize=11,
+        leading=18,
+        spaceAfter=4,
+        fontName="Helvetica-Oblique"
+        # textColor=colors.HexColor("#616161")
+    )
+
+    synonym_style = ParagraphStyle(
+        name="SynonymText",
+        fontSize=12,
+        leading=20,
+        leftIndent=15,
+        textColor=colors.HexColor("#1b5e20")
+    )
+
+    antonym_style = ParagraphStyle(
+        name="AntonymText",
+        fontSize=12,
+        leading=20,
+        leftIndent=15,
+        textColor=colors.HexColor("#b71c1c")
+    )
+
+    # --- Content generation ---
     for i, word_data in enumerate(word_list):
         word_title = word_data['word'].title()
         elements.append(Paragraph(word_title, title_style))
-        elements.append(Spacer(1, 6))
+        elements.append(Spacer(1, 4))
 
-        elements.append(Paragraph("Meanings", h3_style))
-        
-        # for meaning in word_data["meanings"]:
-        #     formatted = format_text(meaning.strip())
-        #     elements.append(Paragraph(f"{formatted}", body_style))
-        
+        # ❖ Meanings
+        elements.append(Paragraph(
+            "<font color='#1a237e'><b>❖ Meanings</b></font>", section_style))
 
         for meaning_text in word_data["meanings"]:
             definition, examples = parse_meaning_and_examples(meaning_text.strip())
-
-            # Main meaning (e.g. "1. ...")
-            elements.append(Paragraph(definition, body_style))
+            elements.append(Paragraph(definition, meaning_style))
 
             if examples:
-                # Proper bullet list, nested under the meaning
-                bullet_items = [
-                    ListItem(Paragraph(f"<i>{ex}</i>", body_style), leftIndent=30)
-                    for ex in examples
-                ]
-                bullet_block = ListFlowable(bullet_items, bulletType='bullet', leftIndent=-10)
-                elements.append(bullet_block)
+                bullets = ListFlowable(
+                    [
+                        ListItem(
+                            Paragraph(f"<i>{ex}</i>", example_style),
+                            value="→"
+                        ) for ex in examples
+                    ],
+                    bulletType="bullet",
+                    bulletFontName="Helvetica",
+                    bulletFontSize=10,
+                    bulletColor=colors.HexColor("#9e9e9e"),
+                    leftIndent=20
+                )
+                elements.append(bullets)
 
-            elements.append(Spacer(1, 8))
-            
-        elements.append(Spacer(1, 12))
+            elements.append(Spacer(1, 6))
 
-        elements.append(Paragraph("Synonyms", h3_style))
-        for synonym in word_data["synonyms"]:
-            elements.append(Paragraph(f"• {synonym}", body_style))
-        elements.append(Spacer(1, 12))
+        elements.append(Spacer(1, 10))
 
-        elements.append(Paragraph("Antonyms", h3_style))
-        for antonym in word_data["antonyms"]:
-            elements.append(Paragraph(f"• {antonym}", body_style))
-        elements.append(Spacer(1, 20))
+        # ✔ Synonyms
+        elements.append(Paragraph(
+            "<font color='#1b5e20'><b>✔ Synonyms</b></font>", section_style))
 
+        if word_data["synonyms"]:
+            for synonym in word_data["synonyms"]:
+                elements.append(Paragraph(f"• {synonym}", synonym_style))
+        else:
+            elements.append(Paragraph("No synonyms provided.", synonym_style))
+        elements.append(Spacer(1, 10))
+
+        # ✘ Antonyms
+        elements.append(Paragraph(
+            "<font color='#b71c1c'><b>✘ Antonyms</b></font>", section_style))
+
+        if word_data["antonyms"]:
+            for antonym in word_data["antonyms"]:
+                elements.append(Paragraph(f"• {antonym}", antonym_style))
+        else:
+            elements.append(Paragraph("No antonyms provided.", antonym_style))
+        elements.append(Spacer(1, 16))
+
+        # Page break after each word
         if i != len(word_list) - 1:
             elements.append(PageBreak())
 
@@ -119,8 +160,8 @@ def create_combined_pdf(word_list):
     return buffer
 
 
-# --- Streamlit App ---
-st.title("📘 JSON to Styled PDF")
+# --- Streamlit App Interface ---
+st.title("📘 JSON to Beautiful PDF")
 
 uploaded_file = st.file_uploader("Upload your JSON file", type=["json"])
 
@@ -131,7 +172,7 @@ if uploaded_file:
 
         if st.button("📄 Generate PDF"):
             date_str = datetime.now().strftime("%y%m%d")
-            pdf_filename = f"{date_str}_words.pdf"
+            pdf_filename = f"{date_str}_styled_words.pdf"
             pdf_bytes = create_combined_pdf(word_list)
 
             st.download_button(
